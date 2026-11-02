@@ -1,0 +1,5 @@
+NAME                          READY   STATUS             RESTARTS      AGE
+web-7d9f8c6b5d-abcde          1/1     Running            0             2 days ago
+web-7d9f8c6b5d-fghij          1/1     Running            1 (3h ago)    2 days ago
+worker-5c4b3a2d1-klmno        0/1     CrashLoopBackOff   12            45m
+redis-0                       1/1     Running            0             10d

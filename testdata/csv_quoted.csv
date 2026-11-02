@@ -1,0 +1,5 @@
+id,product,description,price
+1,"Widget, Large","A big widget, with ""extra"" features",19.99
+2,Gadget,"Multi-line
+description here",5.00
+3,"Thing","Contains <b>html</b> & ampersands",0.99

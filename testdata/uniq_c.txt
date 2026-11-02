@@ -1,0 +1,4 @@
+    142 GET /api/users
+     87 POST /api/login
+     12 DELETE /api/session
+      3 PUT /api/users/42

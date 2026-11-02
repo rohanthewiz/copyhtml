@@ -1,0 +1,3 @@
+# Sample inputs must be stored byte-for-byte: some deliberately contain CRLF
+# line endings and a BOM, which line-ending normalization would strip.
+testdata/** -text

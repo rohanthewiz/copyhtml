@@ -1,0 +1,5 @@
+Item,Qty,Unit Price,Total,Pct
+Apples,10,0.50,5.00,12.5%
+Bananas,120,0.25,30.00,75%
+Cherries,3,1.00,3.00,7.5%
+Total,,,"38.00",100%

@@ -1,0 +1,6 @@
+ id |   username   |        email         | active
+----+--------------+----------------------+--------
+  1 | jdoe         | jdoe@example.com     | t
+  2 | asmith       | asmith@example.com   | f
+  3 | mlee         | mlee@example.com     | t
+(3 rows)
