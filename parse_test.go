@@ -124,6 +124,41 @@ func TestParseAuto(t *testing.T) {
 			rows:   [][]string{{"KEY", "VALUE"}, {"a", "short"}, {"averyveryverylongkey", "long value here"}},
 		},
 		{
+			// Rule 3b: widths differ, but the header and most records are
+			// delimited, so it is CSV. Short rows are padded by normalize.
+			name:   "ragged csv padded",
+			in:     "a,b,c\n1,2\n3,4,5\n",
+			format: "csv",
+			rows:   [][]string{{"a", "b", "c"}, {"1", "2", ""}, {"3", "4", "5"}},
+		},
+		{
+			// A lone one-field record (e.g. a row with only its first
+			// column filled) is tolerated while it is a minority.
+			name:   "ragged csv with a one-field row",
+			in:     "id,name,note\n1,alpha,x\n2\n3,gamma\n",
+			format: "csv",
+			rows:   [][]string{{"id", "name", "note"}, {"1", "alpha", "x"}, {"2", "", ""}, {"3", "gamma", ""}},
+		},
+		{
+			name:   "ragged semicolon csv",
+			in:     "a;b;c\n1;2\n3;4;5\n",
+			format: "semicolon csv",
+			rows:   [][]string{{"a", "b", "c"}, {"1", "2", ""}, {"3", "4", "5"}},
+		},
+		{
+			// Only the first line has a comma: fails rule 3b's majority
+			// test, so it stays space-aligned instead of becoming a CSV
+			// that splits "Sales, by region" on the comma and leaves every
+			// other row as one cell. (How the aligned parser then cuts
+			// the first line is its own concern; the point is the format.)
+			name: "comma only in header line is not csv",
+			in: "Sales, by region\n" +
+				"north   10\n" +
+				"south   20\n",
+			format: "space-aligned",
+			rows:   [][]string{{"Sales,", "by region"}, {"north", "10"}, {"south", "20"}},
+		},
+		{
 			name:   "trailing delimiter column dropped",
 			in:     "a,b,\n1,2,\n",
 			format: "csv",

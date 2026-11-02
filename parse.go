@@ -84,6 +84,8 @@ func Parse(text, format string, delim rune) (*Table, error) {
 //	1     every line has a tab                        → TSV (spreadsheet copy)
 //	2     every content line has a vertical bar       → pipe (md/psql/box)
 //	3     CSV parse with identical field count ≥2     → CSV (',' or ';')
+//	3b    CSV parse, header ≥2 fields and most        → CSV, ragged rows
+//	      records ≥2 fields                             padded by normalize
 //	4     at least half the content lines have a bar  → pipe, ignoring prose
 //	                                                    or captions around it
 //	5     otherwise                                   → whitespace-aligned
@@ -92,6 +94,12 @@ func Parse(text, format string, delim rune) (*Table, error) {
 // still parses as CSV. Its strict "identical count" test keeps aligned
 // output with commas in only some lines (e.g. "1,234" under a header that
 // has no comma) from being misread as CSV.
+//
+// Rule 3b accepts ragged CSV, such as exports that drop trailing empty
+// fields. It only runs when no delimiter passes rule 3, so a clean match
+// for one delimiter always beats a loose match for the other. See
+// relaxedDelimiter for why requiring a delimited header keeps aligned
+// output out.
 func parseAuto(text string, lines []string) (*Table, error) {
 	content := filter(lines, func(s string) bool { return !isBorder(s) })
 	bars := count(content, hasBar)
@@ -102,7 +110,11 @@ func parseAuto(text string, lines []string) (*Table, error) {
 	case len(content) > 0 && bars == len(content):
 		return parsePipe(lines), nil
 	}
-	if d, ok := strictDelimiter(text); ok {
+	d, ok := strictDelimiter(text)
+	if !ok {
+		d, ok = relaxedDelimiter(text)
+	}
+	if ok {
 		name := "csv"
 		if d == ';' {
 			name = "semicolon csv"
@@ -152,6 +164,56 @@ func strictDelimiter(text string) (rune, bool) {
 		r.LazyQuotes = true
 		rows, err := r.ReadAll()
 		if err != nil || len(rows) == 0 {
+			continue
+		}
+		if n := len(rows[0]); n > bestCols {
+			best, bestCols = d, n
+		}
+	}
+	return best, best != 0
+}
+
+// relaxedDelimiter is the fallback for CSV whose records have different
+// widths. A delimiter qualifies when:
+//
+//  1. the first record (the header) has at least 2 fields, and
+//  2. more than half of all records have at least 2 fields.
+//
+// Condition 1 does most of the work against false positives. In aligned
+// CLI output the commas live in the data ("0.12, 0.30", "1,234"), while
+// the header is plain words separated by spaces, so it parses as a single
+// field and the delimiter is rejected. Condition 2 lets through a CSV with
+// a few one-field lines, such as a trailing note or a row with only its
+// first column filled, while rejecting text where the header line is the
+// only one that happens to contain a comma.
+//
+// The record widths themselves are not compared, so these all pass
+// (normalize later pads every row to the widest):
+//
+//	a,b,c        header 3
+//	1,2          short row
+//	3,4,5,6      long row
+//
+// When both delimiters qualify, the wider header wins, matching
+// strictDelimiter.
+func relaxedDelimiter(text string) (rune, bool) {
+	best, bestCols := rune(0), 1
+	for _, d := range []rune{',', ';'} {
+		r := csv.NewReader(strings.NewReader(text))
+		r.Comma = d
+		r.FieldsPerRecord = -1 // allow ragged records; widths checked below
+		r.LazyQuotes = true
+		rows, err := r.ReadAll()
+		if err != nil || len(rows) == 0 || len(rows[0]) < 2 {
+			continue
+		}
+		multi := 0
+		for _, row := range rows {
+			if len(row) >= 2 {
+				multi++
+			}
+		}
+		if 2*multi <= len(rows) {
 			continue
 		}
 		if n := len(rows[0]); n > bestCols {

@@ -138,15 +138,14 @@ func TestSamples(t *testing.T) {
 			cells: map[cell]string{{1, 1}: "0.12, 0.30", {2, 2}: "12"},
 		},
 		{
-			// Known limitation, pinned so a change to detection is a
-			// deliberate decision: auto requires an identical field count
-			// on every row before choosing CSV, so a ragged CSV falls
-			// through to space-aligned and each line becomes one cell.
-			file: "ragged.csv", wantFormat: "space-aligned", rows: 4, cols: 1,
-			cells: map[cell]string{{0, 0}: "a,b,c", {2, 0}: "3,4,5,6"},
+			// Rows have 3, 2, 4 and 3 fields, so the strict rule fails and
+			// the relaxed rule (rule 3b in parseAuto) picks CSV. Short rows
+			// are padded to the widest.
+			file: "ragged.csv", wantFormat: "csv", rows: 4, cols: 4,
+			cells: map[cell]string{{0, 3}: "", {1, 1}: "2", {1, 2}: "", {2, 3}: "6", {3, 1}: ""},
 		},
 		{
-			// Forcing CSV parses it, with short rows padded to the widest.
+			// Forcing CSV gives the same result as auto-detection.
 			file: "ragged.csv", format: "csv", wantFormat: "csv", rows: 4, cols: 4,
 			cells: map[cell]string{{0, 3}: "", {1, 1}: "2", {1, 2}: "", {2, 3}: "6", {3, 1}: ""},
 		},

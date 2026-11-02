@@ -20,7 +20,7 @@ auto-detection picks today.
 | `docker_ps.txt` | Space-aligned, multi-word header ("CONTAINER ID"), an empty PORTS cell | ws, 7 cols |
 | `uniq_c.txt` | `uniq -c` output: leading spaces, no header line | ws, 2 cols |
 | `ambiguous_commas_in_ws.txt` | Aligned columns whose values contain commas (must not become CSV) | ws, 3 cols |
-| `ragged.csv` | Rows with differing field counts | **ws, 1 col** (needs `-f csv` → 4 cols, padded) |
+| `ragged.csv` | Rows with differing field counts | CSV, 4 cols (short rows padded) |
 | `blank_lines.csv` | Blank lines between and after rows | CSV, 2 cols |
 | `single_row.csv` | One row only, rendered as data, not header | CSV, 3 cols |
 | `empty.txt` | Empty input | error: `no input text` |
