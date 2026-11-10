@@ -7,45 +7,61 @@ bordered table, not raw text or literal tags.
 ## Install
 
 ```sh
-cd copyhtml
-go install        # installs to ~/go/bin/copyhtml
+go install github.com/rohanthewiz/copyhtml@latest
+```
+
+Or from a local clone:
+
+```sh
+go install        # installs to ~/go/bin/copyhtml (or $GOBIN)
 # or
 go build -o copyhtml .
 ```
 
-Pure Go, standard library only.
+Pure Go (1.26.1+), standard library only.
 
 ## Usage
 
-```sh
-copyhtml data.csv             # from a file
-kubectl get pods | copyhtml   # from a pipe
-copyhtml                      # nothing piped in: reads the clipboard
-copyhtml -stdout data.csv     # print the HTML instead of copying it
+```
+copyhtml [flags] [file|-]
 ```
 
-Run with no arguments and nothing piped in, it reads the clipboard. So you can
-copy table text from anywhere, run `copyhtml`, and paste into Teams.
+```sh
+copyhtml data.csv                             # from a file
+kubectl get pods | copyhtml                   # from a pipe
+sort ips.txt | uniq -c | copyhtml -no-header  # headerless output
+copyhtml                                      # nothing piped in: reads the clipboard (macOS)
+copyhtml -stdout data.csv                     # print the HTML instead of copying it
+```
+
+Run with no arguments and nothing piped in, it reads the clipboard (macOS only;
+see [Platform notes](#platform-notes)). So you can copy table text from
+anywhere, run `copyhtml`, and paste into Teams.
+
+Pass `-` to read stdin explicitly, and place flags before `[file|-]` (standard
+Go `flag` parsing).
 
 ### Flags
 
 | Flag | Meaning |
 |---|---|
-| `-f` | Input format: `auto` (default), `csv`, `tsv`, `pipe` (Markdown/psql/box), `ws` (space-aligned columns) |
-| `-d` | Explicit single-character delimiter, e.g. `';'` or `'\t'`. Overrides `-f` |
-| `-no-header` | Treat the first row as data rather than a header |
+| `-f` | Input format: `auto` (default), `csv`, `tsv`, `pipe` (aliases: `md`, `markdown`, `psql`, `box`, `mysql`), `ws` (aliases: `aligned`, `space`, `fixed`) |
+| `-d` | Explicit single-character delimiter, e.g. `';'` or `'\t'` (`tab` and `TAB` also work). Overrides `-f` |
+| `-no-header` | Treat the first row as data rather than a header (single-row input is always rendered as data) |
 | `-stdout` | Write the HTML to stdout instead of the clipboard |
 | `-q` | Suppress the summary line on stderr |
 
 ## Input it recognises
 
-- **CSV**, including quoted cells, embedded commas and multi-line cells
+- **CSV**, including quoted cells, embedded commas, multi-line cells, stray
+  quotes (`15" monitor`), and ragged rows (short rows are padded to the widest)
 - **Semicolon-separated** files
 - **TSV**, which is what Excel and Google Sheets put on the clipboard
-- **Pipe tables**: Markdown, psql, MySQL `+---+` grids, and Unicode box drawing
-  (`┌─┬─┐`), like the tables Claude Code draws in the terminal
-- **Columns aligned with spaces**, like `kubectl` or `docker ps` output.
-  Values containing spaces, such as "2 days ago", stay in one cell.
+- **Pipe tables**: Markdown (including `\|` escaped pipes), psql, MySQL `+---+`
+  grids, and Unicode box drawing (`┌─┬─┐`), like the tables Claude Code draws
+  in the terminal
+- **Columns aligned with spaces**, like `kubectl`, `docker ps`, or `uniq -c`
+  output. Values containing spaces, such as "2 days ago", stay in one cell.
 
 If the format is guessed wrong, force it with `-f csv|tsv|pipe|ws`, or set the
 separator with `-d ';'`.
@@ -54,6 +70,8 @@ Also handled:
 
 - A UTF-8 BOM (from Excel CSV exports) is stripped.
 - CRLF and lone-CR line endings are normalized.
+- Blank lines and trailing empty columns (e.g. from a trailing delimiter on
+  every line) are dropped.
 - Row-count footers from psql and MySQL (`(3 rows)`, `1 row in set`) are dropped.
 - Lines with no bars around a pipe table, such as captions or notes, are skipped.
 
@@ -66,8 +84,13 @@ The rules are tried in order, and the first match wins:
 | 1 | Every line has a tab | TSV |
 | 2 | Every content line has a vertical bar | Pipe table |
 | 3 | Parses as CSV with the same field count (2 or more) on every record | CSV (`,` or `;`) |
+| 3b | Parses as CSV where the header has 2+ fields and more than half of all records have 2+ fields | CSV (`,` or `;`, ragged rows padded) |
 | 4 | At least half the content lines have a bar | Pipe table (ignores surrounding prose) |
 | 5 | Otherwise | Space-aligned columns |
+
+Rule 3 is checked for both `,` and `;` before rule 3b is tried, so a clean
+match always beats a ragged one. If both delimiters pass the same rule, the
+one giving more columns wins (for 3b, the header's width), and `,` wins a tie.
 
 Space-aligned columns are split at *gutters*: character positions that are a
 space on every line. Values that contain single spaces therefore don't get
@@ -81,24 +104,40 @@ spaces instead.
   attributes when you paste.
 - There are no background colours, so the header stays readable in Teams'
   dark theme.
-- The header row goes in `<thead>` as `<th>`, so it renders bold everywhere.
-- Columns where every value is a number (`125`, `1,234`, `$5.00`, `12%`) are
-  right-aligned. Markdown alignment rows (`|:--|--:|:-:|`) take precedence.
-- In Markdown input, `` `code` `` and `**bold**` become formatting. Italics
-  are not converted, since underscores are common in identifiers.
+- The header row goes in `<thead>` as `<th>`, so it renders bold everywhere
+  (unless `-no-header` is set or the input has only a single row).
+- Columns where every value is a number (`125`, `-3.5`, `1,234`, `$5.00`,
+  `€10`, `12%`, or bold Markdown totals like `**125**`) are right-aligned.
+  Markdown alignment rows (`|:--|--:|:-:|`) take precedence.
+- In Markdown input, `` `code` `` and `**bold**` become `<code>` and `<b>`.
+  Italics are not converted, since underscores are common in identifiers.
+- Multi-line cells render with `<br>` in HTML and flatten to spaces in the
+  plain-text fallback.
 - All cell text is HTML-escaped before any formatting is applied.
 - A tab-separated plain-text copy goes on the clipboard too, for apps that
   won't take HTML.
 - A one-line summary on stderr says what was found, e.g.
-  `copied 25 rows × 14 columns (+ header, csv, from data.csv) to the clipboard as HTML`.
+  `copyhtml: copied 25 rows × 14 columns (+ header, csv, from data.csv) to the clipboard as HTML`.
 
 ## Platform notes
 
-- Clipboard access is macOS-only. It goes through `osascript` (JavaScript for
-  Automation, which calls `NSPasteboard`), setting both `public.html` and
-  `public.utf8-plain-text`. Data is passed over stdin as JSON, so large
-  tables don't hit argument-length limits.
-- On other platforms, use `-stdout`.
+- Built-in clipboard access is macOS-only. It goes through `osascript`
+  (JavaScript for Automation, which calls `NSPasteboard`), setting both
+  `public.html` and `public.utf8-plain-text`. Data is passed over stdin as
+  JSON, so large tables don't hit argument-length limits.
+- On Linux, pipe `-stdout` to a clipboard tool. Reading the clipboard isn't
+  built in either, so for the copy → run → paste workflow, pipe the clipboard
+  in as well:
+  ```sh
+  copyhtml -stdout data.csv | wl-copy --type text/html                  # Wayland
+  copyhtml -stdout data.csv | xclip -selection clipboard -t text/html   # X11
+
+  # Clipboard in, HTML table back out
+  wl-paste | copyhtml -stdout | wl-copy --type text/html
+  xclip -selection clipboard -o | copyhtml -stdout | xclip -selection clipboard -t text/html
+  ```
+  Only `text/html` is offered this way, so there is no plain-text fallback for
+  apps that won't take HTML.
 - Column positions are counted in characters, so East Asian wide characters
   can misalign space-aligned input.
 
@@ -111,7 +150,9 @@ spaces instead.
 | `render.go` | HTML and TSV rendering, numeric alignment, inline Markdown |
 | `clipboard_darwin.go` | macOS clipboard read/write via `osascript` |
 | `clipboard_other.go` | Stub for other platforms (`-stdout` only) |
-| `parse_test.go` | Tests for detection, parsing, rendering and the CLI path |
+| `parse_test.go` | Unit tests for detection, parsing, rendering and the CLI path |
+| `samples_test.go` | End-to-end sample tests over every fixture in `testdata/` |
+| `testdata/` | Real-world sample inputs and fixture index (`testdata/README.md`) |
 
 ```sh
 go test ./...
